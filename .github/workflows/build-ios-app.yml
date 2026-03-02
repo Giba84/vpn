@@ -22,6 +22,16 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      # Дополнительный шаг: настраиваем проект на фиктивную команду и отключаем подпись
+      - name: Configure Xcode project for unsigned build
+        run: |
+          # Устанавливаем DEVELOPMENT_TEAM = "ABCDEF1234" (фиктивный ID)
+          /usr/libexec/PlistBuddy -c "Set :objects:BCDEFGHIJK:buildSettings:DEVELOPMENT_TEAM ABCDEF1234" ios/Runner.xcodeproj/project.pbxproj
+          # Отключаем требование подписи (CODE_SIGN_IDENTITY = "")
+          /usr/libexec/PlistBuddy -c "Set :objects:BCDEFGHIJK:buildSettings:CODE_SIGN_IDENTITY \"\"" ios/Runner.xcodeproj/project.pbxproj
+          # Отключаем PROVISIONING_PROFILE_SPECIFIER
+          /usr/libexec/PlistBuddy -c "Set :objects:BCDEFGHIJK:buildSettings:PROVISIONING_PROFILE_SPECIFIER \"\"" ios/Runner.xcodeproj/project.pbxproj
+
       - name: Build unsigned .app
         run: flutter build ios --no-codesign --release
 
