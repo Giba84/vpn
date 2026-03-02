@@ -1,4 +1,4 @@
-name: Build unsigned .app and pack to .ipa
+name: Build iOS .app (debug) and pack to .ipa
 
 on:
   push:
@@ -6,14 +6,14 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-ios-app:
+  build-ios-debug:
     runs-on: macos-latest
 
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
 
-      # Ручная установка Flutter
+      # Ручная установка Flutter (надёжно)
       - name: 🔧 Install Flutter
         run: |
           git clone https://github.com/flutter/flutter.git --depth 1 -b stable $HOME/flutter
@@ -22,42 +22,20 @@ jobs:
       - name: 📦 Install dependencies
         run: flutter pub get
 
-      # Генерация конфигов (нужно для сборки)
-      - name: 📲 Generate config files
-        run: flutter build ios --no-codesign --config-only
-
-      # Установка CocoaPods
-      - name: 📲 Install Pods
-        run: |
-          cd ios
-          pod install --repo-update
-          cd ..
-
-      # Подчищаем требования к подписи в проекте Xcode
-      - name: 🛠 Remove signing requirements
-        run: |
-          PROJECT_FILE="ios/Runner.xcodeproj/project.pbxproj"
-          # Убираем DEVELOPMENT_TEAM
-          sed -i '' 's/DEVELOPMENT_TEAM = [^;]*;/DEVELOPMENT_TEAM = "";/g' "$PROJECT_FILE"
-          # Убираем PROVISIONING_PROFILE
-          sed -i '' 's/PROVISIONING_PROFILE_SPECIFIER = [^;]*;/PROVISIONING_PROFILE_SPECIFIER = "";/g' "$PROJECT_FILE"
-          # Отключаем CODE_SIGN_IDENTITY
-          sed -i '' 's/CODE_SIGN_IDENTITY = "[^"]*"/CODE_SIGN_IDENTITY = ""/g' "$PROJECT_FILE"
-
-      # Сборка неподписанного .app
-      - name: 🏗 Build unsigned .app
-        run: flutter build ios --release --no-codesign
+      # Сборка debug-версии .app (без подписи)
+      - name: 🏗 Build debug .app
+        run: flutter build ios --debug --no-codesign
 
       # Упаковка в .ipa
       - name: 📦 Package to .ipa
         run: |
           mkdir -p Payload
           cp -r build/ios/iphoneos/Runner.app Payload/
-          zip -r app.ipa Payload
+          zip -r app-debug.ipa Payload
 
       # Загрузка артефакта
       - name: ☁️ Upload .ipa
         uses: actions/upload-artifact@v4
         with:
-          name: app-unsigned.ipa
-          path: app.ipa
+          name: app-debug.ipa
+          path: app-debug.ipa
