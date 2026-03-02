@@ -3,7 +3,7 @@ name: Build iOS .app (unsigned) – максимально надёжно
 on:
   push:
     branches: [ main, master ]
-  workflow_dispatch:   # позволяет запускать вручную
+  workflow_dispatch:
 
 jobs:
   build-ios-app:
@@ -13,11 +13,13 @@ jobs:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
 
-      - name: 🔧 Setup Flutter (stable)
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: 'stable'
-          channel: 'stable'
+      # Ручная установка Flutter (самый надёжный способ)
+      - name: 🔧 Install Flutter manually
+        run: |
+          git clone https://github.com/flutter/flutter.git --depth 1 -b stable $HOME/flutter
+          echo "$HOME/flutter/bin" >> $GITHUB_PATH
+          echo "$HOME/flutter/bin/cache/dart-sdk/bin" >> $GITHUB_PATH
+          flutter doctor -v
 
       - name: 📦 Install Flutter dependencies
         run: flutter pub get
@@ -25,7 +27,6 @@ jobs:
       - name: 🧹 Clean any previous builds
         run: flutter clean
 
-      # Универсальная настройка Xcode проекта для сборки без подписи
       - name: 🛠 Configure Xcode project for unsigned build
         run: |
           PROJECT_FILE="ios/Runner.xcodeproj/project.pbxproj"
@@ -33,25 +34,13 @@ jobs:
             echo "❌ Xcode project file not found!"
             exit 1
           fi
-          
-          # Делаем резервную копию на всякий случай
           cp "$PROJECT_FILE" "$PROJECT_FILE.backup"
-          
-          # Устанавливаем DEVELOPMENT_TEAM в фиктивный ID (любой 10-символьный)
           sed -i '' 's/DEVELOPMENT_TEAM = [^;]*;/DEVELOPMENT_TEAM = ABCDEF1234;/g' "$PROJECT_FILE"
-          
-          # Отключаем CODE_SIGN_IDENTITY
           sed -i '' 's/CODE_SIGN_IDENTITY = "[^"]*"/CODE_SIGN_IDENTITY = ""/g' "$PROJECT_FILE"
-          
-          # Отключаем PROVISIONING_PROFILE_SPECIFIER
           sed -i '' 's/PROVISIONING_PROFILE_SPECIFIER = [^;]*;/PROVISIONING_PROFILE_SPECIFIER = "";/g' "$PROJECT_FILE"
-          
-          # Также отключаем любые упоминания provisioning profiles в других местах
           sed -i '' 's/PROVISIONING_PROFILE = "[^"]*"/PROVISIONING_PROFILE = ""/g' "$PROJECT_FILE"
-          
           echo "✅ Xcode project configured for unsigned build"
 
-      # Принудительная установка Pods (иногда требуется для корректной сборки)
       - name: 📲 Install CocoaPods dependencies
         run: |
           cd ios
@@ -59,11 +48,8 @@ jobs:
           cd ..
 
       - name: 🏗 Build unsigned .app
-        run: |
-          # Явно указываем target устройство (iOS) и отключаем codesign
-          flutter build ios --release --no-codesign
-          
-      # Проверка, что .app создан
+        run: flutter build ios --release --no-codesign
+
       - name: ✅ Verify .app exists
         run: |
           if [ -d "build/ios/iphoneos/Runner.app" ]; then
@@ -73,7 +59,6 @@ jobs:
             exit 1
           fi
 
-      # Упаковка в .ipa
       - name: 📦 Package .app into .ipa
         run: |
           mkdir -p Payload
@@ -81,14 +66,12 @@ jobs:
           zip -r app.ipa Payload
           echo "✅ .ipa created: app.ipa"
 
-      # Загрузка артефакта
       - name: ☁️ Upload .ipa artifact
         uses: actions/upload-artifact@v4
         with:
           name: app-ipa-unsigned
           path: app.ipa
 
-      # (Опционально) Загружаем также .app на случай, если нужен
       - name: ☁️ Upload .app artifact (optional)
         uses: actions/upload-artifact@v4
         with:
