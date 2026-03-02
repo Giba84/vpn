@@ -1,4 +1,4 @@
-name: Build iOS .app (debug) and pack to .ipa
+name: Build unsigned .ipa for LiveContainer
 
 on:
   push:
@@ -6,36 +6,57 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-ios-debug:
+  build-unsigned-ipa:
     runs-on: macos-latest
 
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
 
-      # Ручная установка Flutter (надёжно)
+      # Установка Flutter
       - name: 🔧 Install Flutter
         run: |
           git clone https://github.com/flutter/flutter.git --depth 1 -b stable $HOME/flutter
           echo "$HOME/flutter/bin" >> $GITHUB_PATH
 
-      - name: 📦 Install dependencies
+      - name: 📦 Get dependencies
         run: flutter pub get
 
-      # Сборка debug-версии .app (без подписи)
-      - name: 🏗 Build debug .app
-        run: flutter build ios --debug --no-codesign
+      # Ручная установка CocoaPods (на всякий случай)
+      - name: 📲 Install CocoaPods
+        run: |
+          cd ios
+          pod install --repo-update
+          cd ..
+
+      # Критический шаг: полностью отключаем подпись в проекте Xcode
+      - name: 🔧 Disable code signing in Xcode project
+        run: |
+          PROJECT_FILE="ios/Runner.xcodeproj/project.pbxproj"
+          # Удаляем все строки с DEVELOPMENT_TEAM
+          sed -i '' '/DEVELOPMENT_TEAM = /d' "$PROJECT_FILE"
+          # Удаляем все строки с PROVISIONING_PROFILE
+          sed -i '' '/PROVISIONING_PROFILE_SPECIFIER = /d' "$PROJECT_FILE"
+          # Удаляем все строки с CODE_SIGN_IDENTITY (оставляем пустые, но лучше удалить)
+          sed -i '' '/CODE_SIGN_IDENTITY = /d' "$PROJECT_FILE"
+          # Для надёжности также удаляем ссылки на ProvisioningStyle
+          sed -i '' '/ProvisioningStyle = /d' "$PROJECT_FILE"
+          echo "✅ Code signing requirements removed from Xcode project"
+
+      # Сборка .app без подписи (теперь Xcode не будет требовать)
+      - name: 🏗 Build unsigned .app
+        run: flutter build ios --release --no-codesign
 
       # Упаковка в .ipa
-      - name: 📦 Package to .ipa
+      - name: 📦 Package .ipa
         run: |
           mkdir -p Payload
           cp -r build/ios/iphoneos/Runner.app Payload/
-          zip -r app-debug.ipa Payload
+          zip -r app-unsigned.ipa Payload
 
       # Загрузка артефакта
       - name: ☁️ Upload .ipa
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug.ipa
-          path: app-debug.ipa
+          name: app-unsigned.ipa
+          path: app-unsigned.ipa
