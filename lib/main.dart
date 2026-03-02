@@ -220,12 +220,9 @@ class _ConfigLoaderScreenState extends State<ConfigLoaderScreen> {
   }
 
   Future<void> _initVpn() async {
-    // ВАЖНО: Замени эти ID на свои из Xcode (должны совпадать с настройками подписи)
-    await _flutterV2Ray.initializeVless(
-      providerBundleIdentifier: 'com.tvoegoiapp.vpnprovider', // Уникальный ID провайдера
-      groupIdentifier: 'group.com.tvoegoiapp',               // App Group ID
-    );
-
+    // Для iOS нужно указать идентификаторы, но в данном случае можно пропустить
+    // await _flutterV2Ray.initializeVless(...);
+    // Подписка на статусы
     _flutterV2Ray.onStatusChanged.listen((status) {
       print('V2Ray статус: $status');
       if (status == V2RayStatus.connected) {
@@ -430,17 +427,6 @@ class _ConfigLoaderScreenState extends State<ConfigLoaderScreen> {
     }
 
     try {
-      final FlutterV2RayURL parser = FlutterV2ray.parseFromURL(server.config);
-      if (parser == null) {
-        print('❌ Ошибка парсинга конфига');
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Неверный формат конфига')),
-        );
-        return;
-      }
-      print('✅ Парсинг успешен, remark: ${parser.remark}');
-
       final bool allowed = await _flutterV2Ray.requestPermission();
       if (!allowed) {
         print('❌ Нет разрешения на VPN');
@@ -458,8 +444,8 @@ class _ConfigLoaderScreenState extends State<ConfigLoaderScreen> {
       });
 
       await _flutterV2Ray.startVless(
-        remark: parser.remark ?? server.remark,
-        config: parser.getFullConfiguration(),
+        remark: server.remark,
+        config: server.config,
         proxyOnly: false,
       );
       print('✅ V2Ray запущен, ждём статуса...');
@@ -480,7 +466,6 @@ class _ConfigLoaderScreenState extends State<ConfigLoaderScreen> {
   Future<void> _disconnect() async {
     try {
       await _flutterV2Ray.stopVless();
-      // Состояние обновится через onStatusChanged
     } catch (e) {
       print('Ошибка отключения: $e');
       setState(() {
@@ -509,7 +494,7 @@ class _ConfigLoaderScreenState extends State<ConfigLoaderScreen> {
 
   @override
   void dispose() {
-    _flutterV2Ray.stopVless(); // на всякий случай при выходе
+    _flutterV2Ray.stopVless();
     super.dispose();
   }
 
@@ -627,7 +612,6 @@ class _ConfigLoaderScreenState extends State<ConfigLoaderScreen> {
                     ),
                   ],
                 ] else ...[
-                  // Состояние ПОДКЛЮЧЕНО
                   Container(
                     width: 100,
                     height: 100,
@@ -672,7 +656,6 @@ class _ConfigLoaderScreenState extends State<ConfigLoaderScreen> {
                   ],
                   SizedBox(height: 30),
 
-                  // КНОПКА ОТКЛЮЧЕНИЯ (большая и красная)
                   ElevatedButton(
                     onPressed: _disconnect,
                     style: ElevatedButton.styleFrom(
