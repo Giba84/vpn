@@ -1,48 +1,96 @@
-name: Build iOS .app (unsigned)
+name: Build iOS .app (unsigned) – максимально надёжно
 
 on:
   push:
     branches: [ main, master ]
-  workflow_dispatch:
+  workflow_dispatch:   # позволяет запускать вручную
 
 jobs:
   build-ios-app:
     runs-on: macos-latest
 
     steps:
-      - name: Checkout code
+      - name: 📥 Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Flutter
+      - name: 🔧 Setup Flutter (stable)
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.x'
+          flutter-version: 'stable'
           channel: 'stable'
 
-      - name: Install dependencies
+      - name: 📦 Install Flutter dependencies
         run: flutter pub get
 
-      # Дополнительный шаг: настраиваем проект на фиктивную команду и отключаем подпись
-      - name: Configure Xcode project for unsigned build
+      - name: 🧹 Clean any previous builds
+        run: flutter clean
+
+      # Универсальная настройка Xcode проекта для сборки без подписи
+      - name: 🛠 Configure Xcode project for unsigned build
         run: |
-          # Устанавливаем DEVELOPMENT_TEAM = "ABCDEF1234" (фиктивный ID)
-          /usr/libexec/PlistBuddy -c "Set :objects:BCDEFGHIJK:buildSettings:DEVELOPMENT_TEAM ABCDEF1234" ios/Runner.xcodeproj/project.pbxproj
-          # Отключаем требование подписи (CODE_SIGN_IDENTITY = "")
-          /usr/libexec/PlistBuddy -c "Set :objects:BCDEFGHIJK:buildSettings:CODE_SIGN_IDENTITY \"\"" ios/Runner.xcodeproj/project.pbxproj
+          PROJECT_FILE="ios/Runner.xcodeproj/project.pbxproj"
+          if [ ! -f "$PROJECT_FILE" ]; then
+            echo "❌ Xcode project file not found!"
+            exit 1
+          fi
+          
+          # Делаем резервную копию на всякий случай
+          cp "$PROJECT_FILE" "$PROJECT_FILE.backup"
+          
+          # Устанавливаем DEVELOPMENT_TEAM в фиктивный ID (любой 10-символьный)
+          sed -i '' 's/DEVELOPMENT_TEAM = [^;]*;/DEVELOPMENT_TEAM = ABCDEF1234;/g' "$PROJECT_FILE"
+          
+          # Отключаем CODE_SIGN_IDENTITY
+          sed -i '' 's/CODE_SIGN_IDENTITY = "[^"]*"/CODE_SIGN_IDENTITY = ""/g' "$PROJECT_FILE"
+          
           # Отключаем PROVISIONING_PROFILE_SPECIFIER
-          /usr/libexec/PlistBuddy -c "Set :objects:BCDEFGHIJK:buildSettings:PROVISIONING_PROFILE_SPECIFIER \"\"" ios/Runner.xcodeproj/project.pbxproj
+          sed -i '' 's/PROVISIONING_PROFILE_SPECIFIER = [^;]*;/PROVISIONING_PROFILE_SPECIFIER = "";/g' "$PROJECT_FILE"
+          
+          # Также отключаем любые упоминания provisioning profiles в других местах
+          sed -i '' 's/PROVISIONING_PROFILE = "[^"]*"/PROVISIONING_PROFILE = ""/g' "$PROJECT_FILE"
+          
+          echo "✅ Xcode project configured for unsigned build"
 
-      - name: Build unsigned .app
-        run: flutter build ios --no-codesign --release
+      # Принудительная установка Pods (иногда требуется для корректной сборки)
+      - name: 📲 Install CocoaPods dependencies
+        run: |
+          cd ios
+          pod install --repo-update
+          cd ..
 
-      - name: Create Payload and zip
+      - name: 🏗 Build unsigned .app
+        run: |
+          # Явно указываем target устройство (iOS) и отключаем codesign
+          flutter build ios --release --no-codesign
+          
+      # Проверка, что .app создан
+      - name: ✅ Verify .app exists
+        run: |
+          if [ -d "build/ios/iphoneos/Runner.app" ]; then
+            echo "✅ .app built successfully"
+          else
+            echo "❌ .app not found!"
+            exit 1
+          fi
+
+      # Упаковка в .ipa
+      - name: 📦 Package .app into .ipa
         run: |
           mkdir -p Payload
           cp -r build/ios/iphoneos/Runner.app Payload/
           zip -r app.ipa Payload
+          echo "✅ .ipa created: app.ipa"
 
-      - name: Upload .ipa artifact
+      # Загрузка артефакта
+      - name: ☁️ Upload .ipa artifact
         uses: actions/upload-artifact@v4
         with:
           name: app-ipa-unsigned
           path: app.ipa
+
+      # (Опционально) Загружаем также .app на случай, если нужен
+      - name: ☁️ Upload .app artifact (optional)
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-bundle-unsigned
+          path: build/ios/iphoneos/Runner.app
