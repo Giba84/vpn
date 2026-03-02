@@ -7,6 +7,6 @@ releases:
       - name: release-ios
         package:
           platform: ios
-          target: app   # <<< важно: собираем .app
+          target: app
           build_args:
-            # export-options-plist: ios/ExportOptions.plist  # эту строку удаляем
+            export-method: development  # добавляем обязательный параметр
