@@ -1,4 +1,4 @@
-name: Build unsigned .ipa for LiveContainer
+name: Build iOS .app (debug) and pack to .ipa
 
 on:
   push:
@@ -6,57 +6,52 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-unsigned-ipa:
+  build-ios-debug:
     runs-on: macos-latest
 
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
 
-      # Установка Flutter
+      # Установка Flutter вручную (надёжнее всего)
       - name: 🔧 Install Flutter
         run: |
           git clone https://github.com/flutter/flutter.git --depth 1 -b stable $HOME/flutter
           echo "$HOME/flutter/bin" >> $GITHUB_PATH
 
-      - name: 📦 Get dependencies
+      # Проверка установки
+      - name: 🔍 Verify Flutter
+        run: flutter doctor -v
+
+      # Установка зависимостей Dart
+      - name: 📦 Install Flutter dependencies
         run: flutter pub get
 
-      # Ручная установка CocoaPods (на всякий случай)
-      - name: 📲 Install CocoaPods
+      # Предварительная загрузка iOS-артефактов (обязательно!)
+      - name: 📲 Precache iOS artifacts
+        run: flutter precache --ios
+
+      # Установка CocoaPods зависимостей (теперь Flutter.xcframework будет на месте)
+      - name: 📦 Install CocoaPods dependencies
         run: |
           cd ios
           pod install --repo-update
           cd ..
 
-      # Критический шаг: полностью отключаем подпись в проекте Xcode
-      - name: 🔧 Disable code signing in Xcode project
-        run: |
-          PROJECT_FILE="ios/Runner.xcodeproj/project.pbxproj"
-          # Удаляем все строки с DEVELOPMENT_TEAM
-          sed -i '' '/DEVELOPMENT_TEAM = /d' "$PROJECT_FILE"
-          # Удаляем все строки с PROVISIONING_PROFILE
-          sed -i '' '/PROVISIONING_PROFILE_SPECIFIER = /d' "$PROJECT_FILE"
-          # Удаляем все строки с CODE_SIGN_IDENTITY (оставляем пустые, но лучше удалить)
-          sed -i '' '/CODE_SIGN_IDENTITY = /d' "$PROJECT_FILE"
-          # Для надёжности также удаляем ссылки на ProvisioningStyle
-          sed -i '' '/ProvisioningStyle = /d' "$PROJECT_FILE"
-          echo "✅ Code signing requirements removed from Xcode project"
+      # Сборка debug-версии .app (не требует подписи)
+      - name: 🏗 Build debug .app
+        run: flutter build ios --debug --no-codesign
 
-      # Сборка .app без подписи (теперь Xcode не будет требовать)
-      - name: 🏗 Build unsigned .app
-        run: flutter build ios --release --no-codesign
-
-      # Упаковка в .ipa
-      - name: 📦 Package .ipa
+      # Упаковка в .ipa (структура Payload/Runner.app)
+      - name: 📦 Package to .ipa
         run: |
           mkdir -p Payload
           cp -r build/ios/iphoneos/Runner.app Payload/
-          zip -r app-unsigned.ipa Payload
+          zip -r app-debug.ipa Payload
 
       # Загрузка артефакта
-      - name: ☁️ Upload .ipa
+      - name: ☁️ Upload .ipa artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-unsigned.ipa
-          path: app-unsigned.ipa
+          name: app-debug.ipa
+          path: app-debug.ipa
