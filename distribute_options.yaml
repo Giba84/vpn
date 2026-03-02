@@ -7,6 +7,6 @@ releases:
       - name: release-ios
         package:
           platform: ios
-          target: ipa
+          target: app   # <<< важно: собираем .app
           build_args:
-            export-options-plist: ios/ExportOptions.plist
+            # export-options-plist: ios/ExportOptions.plist  # эту строку удаляем
