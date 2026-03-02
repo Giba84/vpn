@@ -13,13 +13,12 @@ jobs:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
 
-      # Шаг 1: Установка Flutter (только клонирование и добавление в PATH)
+      # Ручная установка Flutter (не зависит от внешних API)
       - name: 🔧 Install Flutter manually
         run: |
           git clone https://github.com/flutter/flutter.git --depth 1 -b stable $HOME/flutter
           echo "$HOME/flutter/bin" >> $GITHUB_PATH
 
-      # Шаг 2: Проверка, что Flutter работает
       - name: 🔍 Verify Flutter installation
         run: flutter doctor -v
 
@@ -29,6 +28,7 @@ jobs:
       - name: 🧹 Clean any previous builds
         run: flutter clean
 
+      # Настройка Xcode проекта для сборки без подписи
       - name: 🛠 Configure Xcode project for unsigned build
         run: |
           PROJECT_FILE="ios/Runner.xcodeproj/project.pbxproj"
@@ -43,15 +43,22 @@ jobs:
           sed -i '' 's/PROVISIONING_PROFILE = "[^"]*"/PROVISIONING_PROFILE = ""/g' "$PROJECT_FILE"
           echo "✅ Xcode project configured for unsigned build"
 
+      # Генерация необходимых конфигурационных файлов (особенно Generated.xcconfig)
+      - name: 📲 Generate iOS config files
+        run: flutter build ios --no-codesign --config-only
+
+      # Установка CocoaPods зависимостей
       - name: 📲 Install CocoaPods dependencies
         run: |
           cd ios
           pod install --repo-update
           cd ..
 
+      # Финальная сборка .app без подписи
       - name: 🏗 Build unsigned .app
         run: flutter build ios --release --no-codesign
 
+      # Проверка, что .app создан
       - name: ✅ Verify .app exists
         run: |
           if [ -d "build/ios/iphoneos/Runner.app" ]; then
@@ -61,6 +68,7 @@ jobs:
             exit 1
           fi
 
+      # Упаковка в .ipa
       - name: 📦 Package .app into .ipa
         run: |
           mkdir -p Payload
@@ -68,6 +76,7 @@ jobs:
           zip -r app.ipa Payload
           echo "✅ .ipa created: app.ipa"
 
+      # Загрузка артефактов
       - name: ☁️ Upload .ipa artifact
         uses: actions/upload-artifact@v4
         with:
