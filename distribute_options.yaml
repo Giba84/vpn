@@ -1,0 +1,12 @@
+variables:
+  APP_ENV: "prod"
+output: dist/
+releases:
+  - name: prod
+    jobs:
+      - name: release-ios
+        package:
+          platform: ios
+          target: ipa
+          build_args:
+            export-options-plist: ios/ExportOptions.plist
