@@ -25,24 +25,6 @@ jobs:
       - name: 📦 Install Flutter dependencies
         run: flutter pub get
 
-      - name: 🧹 Clean any previous builds
-        run: flutter clean
-
-      # Настройка Xcode проекта для сборки без подписи
-      - name: 🛠 Configure Xcode project for unsigned build
-        run: |
-          PROJECT_FILE="ios/Runner.xcodeproj/project.pbxproj"
-          if [ ! -f "$PROJECT_FILE" ]; then
-            echo "❌ Xcode project file not found!"
-            exit 1
-          fi
-          cp "$PROJECT_FILE" "$PROJECT_FILE.backup"
-          sed -i '' 's/DEVELOPMENT_TEAM = [^;]*;/DEVELOPMENT_TEAM = ABCDEF1234;/g' "$PROJECT_FILE"
-          sed -i '' 's/CODE_SIGN_IDENTITY = "[^"]*"/CODE_SIGN_IDENTITY = ""/g' "$PROJECT_FILE"
-          sed -i '' 's/PROVISIONING_PROFILE_SPECIFIER = [^;]*;/PROVISIONING_PROFILE_SPECIFIER = "";/g' "$PROJECT_FILE"
-          sed -i '' 's/PROVISIONING_PROFILE = "[^"]*"/PROVISIONING_PROFILE = ""/g' "$PROJECT_FILE"
-          echo "✅ Xcode project configured for unsigned build"
-
       # Генерация необходимых конфигурационных файлов (особенно Generated.xcconfig)
       - name: 📲 Generate iOS config files
         run: flutter build ios --no-codesign --config-only
@@ -54,9 +36,11 @@ jobs:
           pod install --repo-update
           cd ..
 
-      # Финальная сборка .app без подписи
-      - name: 🏗 Build unsigned .app
-        run: flutter build ios --release --no-codesign
+      # Используем development-подпись с автоматически созданным сертификатом раннера
+      - name: 🏗 Build signed development .app (for device)
+        run: |
+          # Устанавливаем DEVELOPMENT_TEAM = "Automatic" через аргументы сборки
+          flutter build ios --release --export-method development
 
       # Проверка, что .app создан
       - name: ✅ Verify .app exists
@@ -68,7 +52,7 @@ jobs:
             exit 1
           fi
 
-      # Упаковка в .ipa
+      # Упаковка в .ipa (теперь он уже должен быть создан, но на всякий случай)
       - name: 📦 Package .app into .ipa
         run: |
           mkdir -p Payload
@@ -76,15 +60,9 @@ jobs:
           zip -r app.ipa Payload
           echo "✅ .ipa created: app.ipa"
 
-      # Загрузка артефактов
+      # Загрузка артефакта
       - name: ☁️ Upload .ipa artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-ipa-unsigned
+          name: app-ipa-development
           path: app.ipa
-
-      - name: ☁️ Upload .app artifact (optional)
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-bundle-unsigned
-          path: build/ios/iphoneos/Runner.app
