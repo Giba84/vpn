@@ -1,4 +1,4 @@
-name: Build iOS .app (unsigned) – максимально надёжно
+name: Build iOS .ipa (development signing)
 
 on:
   push:
@@ -13,7 +13,7 @@ jobs:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
 
-      # Ручная установка Flutter (не зависит от внешних API)
+      # Ручная установка Flutter (надёжно)
       - name: 🔧 Install Flutter manually
         run: |
           git clone https://github.com/flutter/flutter.git --depth 1 -b stable $HOME/flutter
@@ -25,7 +25,7 @@ jobs:
       - name: 📦 Install Flutter dependencies
         run: flutter pub get
 
-      # Генерация необходимых конфигурационных файлов (особенно Generated.xcconfig)
+      # Генерация конфигов (нужно для pod install)
       - name: 📲 Generate iOS config files
         run: flutter build ios --no-codesign --config-only
 
@@ -36,33 +36,23 @@ jobs:
           pod install --repo-update
           cd ..
 
-      # Используем development-подпись с автоматически созданным сертификатом раннера
-      - name: 🏗 Build signed development .app (for device)
-        run: |
-          # Устанавливаем DEVELOPMENT_TEAM = "Automatic" через аргументы сборки
-          flutter build ios --release --export-method development
+      # Сборка .ipa с development-подписью (использует встроенные сертификаты раннера)
+      - name: 🏗 Build .ipa (development signing)
+        run: flutter build ipa --export-method development
 
-      # Проверка, что .app создан
-      - name: ✅ Verify .app exists
+      # Проверка, что .ipa создан
+      - name: ✅ Verify .ipa exists
         run: |
-          if [ -d "build/ios/iphoneos/Runner.app" ]; then
-            echo "✅ .app built successfully"
+          if [ -f "build/ios/ipa/*.ipa" ]; then
+            echo "✅ .ipa built successfully"
           else
-            echo "❌ .app not found!"
+            echo "❌ .ipa not found!"
             exit 1
           fi
-
-      # Упаковка в .ipa (теперь он уже должен быть создан, но на всякий случай)
-      - name: 📦 Package .app into .ipa
-        run: |
-          mkdir -p Payload
-          cp -r build/ios/iphoneos/Runner.app Payload/
-          zip -r app.ipa Payload
-          echo "✅ .ipa created: app.ipa"
 
       # Загрузка артефакта
       - name: ☁️ Upload .ipa artifact
         uses: actions/upload-artifact@v4
         with:
           name: app-ipa-development
-          path: app.ipa
+          path: build/ios/ipa/*.ipa
