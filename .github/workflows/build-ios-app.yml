@@ -1,4 +1,4 @@
-name: Build iOS .ipa (development signing)
+name: Build unsigned .app and pack to .ipa
 
 on:
   push:
@@ -13,46 +13,51 @@ jobs:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
 
-      # Ручная установка Flutter (надёжно)
-      - name: 🔧 Install Flutter manually
+      # Ручная установка Flutter
+      - name: 🔧 Install Flutter
         run: |
           git clone https://github.com/flutter/flutter.git --depth 1 -b stable $HOME/flutter
           echo "$HOME/flutter/bin" >> $GITHUB_PATH
 
-      - name: 🔍 Verify Flutter installation
-        run: flutter doctor -v
-
-      - name: 📦 Install Flutter dependencies
+      - name: 📦 Install dependencies
         run: flutter pub get
 
-      # Генерация конфигов (нужно для pod install)
-      - name: 📲 Generate iOS config files
+      # Генерация конфигов (нужно для сборки)
+      - name: 📲 Generate config files
         run: flutter build ios --no-codesign --config-only
 
-      # Установка CocoaPods зависимостей
-      - name: 📲 Install CocoaPods dependencies
+      # Установка CocoaPods
+      - name: 📲 Install Pods
         run: |
           cd ios
           pod install --repo-update
           cd ..
 
-      # Сборка .ipa с development-подписью (использует встроенные сертификаты раннера)
-      - name: 🏗 Build .ipa (development signing)
-        run: flutter build ipa --export-method development
-
-      # Проверка, что .ipa создан
-      - name: ✅ Verify .ipa exists
+      # Подчищаем требования к подписи в проекте Xcode
+      - name: 🛠 Remove signing requirements
         run: |
-          if [ -f "build/ios/ipa/*.ipa" ]; then
-            echo "✅ .ipa built successfully"
-          else
-            echo "❌ .ipa not found!"
-            exit 1
-          fi
+          PROJECT_FILE="ios/Runner.xcodeproj/project.pbxproj"
+          # Убираем DEVELOPMENT_TEAM
+          sed -i '' 's/DEVELOPMENT_TEAM = [^;]*;/DEVELOPMENT_TEAM = "";/g' "$PROJECT_FILE"
+          # Убираем PROVISIONING_PROFILE
+          sed -i '' 's/PROVISIONING_PROFILE_SPECIFIER = [^;]*;/PROVISIONING_PROFILE_SPECIFIER = "";/g' "$PROJECT_FILE"
+          # Отключаем CODE_SIGN_IDENTITY
+          sed -i '' 's/CODE_SIGN_IDENTITY = "[^"]*"/CODE_SIGN_IDENTITY = ""/g' "$PROJECT_FILE"
+
+      # Сборка неподписанного .app
+      - name: 🏗 Build unsigned .app
+        run: flutter build ios --release --no-codesign
+
+      # Упаковка в .ipa
+      - name: 📦 Package to .ipa
+        run: |
+          mkdir -p Payload
+          cp -r build/ios/iphoneos/Runner.app Payload/
+          zip -r app.ipa Payload
 
       # Загрузка артефакта
-      - name: ☁️ Upload .ipa artifact
+      - name: ☁️ Upload .ipa
         uses: actions/upload-artifact@v4
         with:
-          name: app-ipa-development
-          path: build/ios/ipa/*.ipa
+          name: app-unsigned.ipa
+          path: app.ipa
